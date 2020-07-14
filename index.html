@@ -2,81 +2,93 @@
 <html lang="en">
 
 <head>
-<title>KRK Stayawake</title>
-<style>
-  #content {
-    display: flex;
-    flex-direction: column;
-    max-width: 800px;
-    height: 80vh;
-    width: 100%;
-  }
-  button {
-    font-size: x-large;
-    width: 100%;
-    height: 8vh;
-    min-height: 40px;
-  }
-  pre {
-    font-family: monospace;
-    width: 100%;
-    display: block;
-    overflow: scroll;
-    min-height: 100px;
-    border: 1px solid black;
-  }
-</style>
-<script>
-  function appendStatus(text) {
-    p = document.createElement("p");
-    p.append(text);
-    document.body.querySelector("#status").prepend(p);
-  }
+  <title>KRK Stayawake</title>
 
-  function startAudio() {
-    const AUDIO_INTERVAL_MS = 1000 * 60 * 18;
-    const AUDIO_DURATION_SEC = 10;
-    const AUDIO_FREQ = 10;
+  <style>
+    #content {
+      display: flex;
+      flex-direction: column;
+      max-width: 800px;
+      height: 80vh;
+      width: 100%;
+    }
+    button {
+      font-size: x-large;
+      width: 100%;
+      height: 8vh;
+      min-height: 40px;
+    }
+    pre {
+      font-family: monospace;
+      width: 100%;
+      display: block;
+      overflow: scroll;
+      min-height: 100px;
+      border: 1px solid black;
+    }
+  </style>
 
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-    var isStopped = false;
-    const onEnded = function() {
-      if (isStopped) return;
-      appendStatus("STOPPED: " + (new Date()).toString());
-      appendStatus("NEXT:    " + (new Date(Date.now() +
-        AUDIO_INTERVAL_MS - AUDIO_DURATION_SEC *
-        1000)).toTimeString())
-    };
-    const playSound = function() {
-      appendStatus("PLAYING: " + (new Date()).toString());
-
-      const oscillator = audioCtx.createOscillator();
-      oscillator.frequency.value = AUDIO_FREQ;
-      oscillator.connect(audioCtx.destination);
-      oscillator.type = 'sine';
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + AUDIO_DURATION_SEC)
-      oscillator.onended = onEnded;
-    };
-
-    playSound();
-    const callbackId = setInterval(playSound, AUDIO_INTERVAL_MS);
-
-    const button = document.querySelector("button");
-    button.textContent = "Stop";
-    button.onclick = function() {
-      isStopped = true;
-      appendStatus("Stopping periodic audio");
-      button.textContent = "Start";
-      button.onclick = startAudio;
-      audioCtx.close();
-      clearInterval(callbackId);
+  <script>
+    function appendStatus(text) {
+      p = document.createElement("p");
+      p.append(text);
+      document.body.querySelector("#status").prepend(p);
     }
 
-    audioCtx.resume();
-  }
-</script>
+    function startAudio() {
+      const AUDIO_INTERVAL_MS = 1000 * 60 * 18;
+      const AUDIO_DURATION_SEC = 10;
+      const AUDIO_FREQ = 10;
+
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      var isStopped = false;
+      const onEnded = function() {
+        if (isStopped) return;
+        appendStatus("STOPPED: " + (new Date()).toString());
+        appendStatus("NEXT:    " + (new Date(Date.now() +
+          AUDIO_INTERVAL_MS - AUDIO_DURATION_SEC *
+          1000)).toTimeString())
+      };
+      const playSound = function() {
+        appendStatus("PLAYING: " + (new Date()).toString());
+
+        const oscillator = audioCtx.createOscillator();
+        oscillator.frequency.value = AUDIO_FREQ;
+        oscillator.connect(audioCtx.destination);
+        oscillator.type = 'sine';
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + AUDIO_DURATION_SEC)
+        oscillator.onended = onEnded;
+      };
+
+      playSound();
+      const callbackId = setInterval(playSound, AUDIO_INTERVAL_MS);
+
+      const button = document.querySelector("button");
+      button.textContent = "Stop";
+      button.onclick = function() {
+        isStopped = true;
+        appendStatus("Stopping periodic audio");
+        button.textContent = "Start";
+        button.onclick = startAudio;
+        audioCtx.close();
+        clearInterval(callbackId);
+      }
+
+      audioCtx.resume();
+    }
+  </script>
+
+  <!-- Global site tag (gtag.js) - Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=UA-172660630-1"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'UA-172660630-1');
+  </script>
 </head>
 
 <body>
