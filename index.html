@@ -46,9 +46,10 @@
       const onEnded = function() {
         if (isStopped) return;
         appendStatus("STOPPED: " + (new Date()).toString());
+        appendStatus(document.createElement("hr"));
         appendStatus("NEXT:    " + (new Date(Date.now() +
           AUDIO_INTERVAL_MS - AUDIO_DURATION_SEC *
-          1000)).toTimeString())
+          1000)).toString())
       };
       const playSound = function() {
         appendStatus("PLAYING: " + (new Date()).toString());
