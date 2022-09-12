@@ -32,55 +32,70 @@
   </style>
 
   <script>
+    // How long to wait between starting a single playback of the sound.
+    const AUDIO_INTERVAL_MSEC = 1000 * 60 * 18;
+
+    // Once we start a sound, how long should it play before stopping?
+    const AUDIO_DURATION_SEC = 10;
+    const AUDIO_DURATION_MSEC = AUDIO_DURATION_SEC * 1000;
+
+    const AUDIO_FREQ = 10;  // Hz
+
+    const BUTTON_TEXT_START = "\u25B6 Start Periodic Audio";
+    const BUTTON_TEXT_STOP = "\u25A0 Stop Periodic Audio";
+
     function appendStatus(text) {
       p = document.createElement("p");
       p.append(text);
       document.body.querySelector("#status").prepend(p);
     }
 
-    function startAudio() {
-      const AUDIO_INTERVAL_MS = 1000 * 60 * 18;
-      const AUDIO_DURATION_SEC = 10;
-      const AUDIO_FREQ = 10;
+    function onBodyLoad() {
+      document.querySelector("button").textContent = BUTTON_TEXT_START;
+    }
 
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    class AudioController {
+      constructor() {
+        this.audioCtx_ = new (window.AudioContext || window.webkitAudioContext)();
+        this.isRunningPeriodically_ = true;
+        this.button_ = document.querySelector("button");
+        this.callbackId_ = setInterval(() => this.playSoundOnce(), AUDIO_INTERVAL_MSEC);
 
-      var isStopped = false;
-      const onEnded = function() {
-        if (isStopped) return;
+        this.button_.textContent = BUTTON_TEXT_STOP;
+        this.button_.onclick = () => this.stopPeriodicAudio();
+
+        this.playSoundOnce();
+        this.audioCtx_.resume();
+      }
+
+      playSoundOnce() {
+        appendStatus("PLAYING: " + (new Date()).toString());
+
+        const oscillator = this.audioCtx_.createOscillator();
+        oscillator.frequency.value = AUDIO_FREQ;
+        oscillator.connect(this.audioCtx_.destination);
+        oscillator.type = 'sine';
+        oscillator.start();
+        oscillator.stop(this.audioCtx_.currentTime + AUDIO_DURATION_SEC)
+        oscillator.onended = () => this.onSoundFinished();
+      }
+
+      onSoundFinished() {
+        if (!this.isRunningPeriodically_) return;
         appendStatus("STOPPED: " + (new Date()).toString());
         appendStatus(document.createElement("hr"));
         appendStatus("NEXT:    " + (new Date(Date.now() +
-          AUDIO_INTERVAL_MS - AUDIO_DURATION_SEC *
-          1000)).toString())
-      };
-      const playSound = function() {
-        appendStatus("PLAYING: " + (new Date()).toString());
-
-        const oscillator = audioCtx.createOscillator();
-        oscillator.frequency.value = AUDIO_FREQ;
-        oscillator.connect(audioCtx.destination);
-        oscillator.type = 'sine';
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + AUDIO_DURATION_SEC)
-        oscillator.onended = onEnded;
-      };
-
-      playSound();
-      const callbackId = setInterval(playSound, AUDIO_INTERVAL_MS);
-
-      const button = document.querySelector("button");
-      button.textContent = "Stop";
-      button.onclick = function() {
-        isStopped = true;
-        appendStatus("Stopping periodic audio");
-        button.textContent = "Start";
-        button.onclick = startAudio;
-        audioCtx.close();
-        clearInterval(callbackId);
+          AUDIO_INTERVAL_MSEC - AUDIO_DURATION_MSEC)).toString())
       }
 
-      audioCtx.resume();
+      stopPeriodicAudio() {
+        this.isRunningPeriodically_ = false;
+        appendStatus("Stopping periodic audio");
+        this.button_.textContent = BUTTON_TEXT_START;
+        this.button_.onclick = () => new AudioController();
+        this.audioCtx_.close();
+        clearInterval(this.callbackId_);
+      }
     }
   </script>
 
@@ -95,7 +110,7 @@
   </script>
 </head>
 
-<body>
+<body onload="onBodyLoad();">
   <div id="content">
     <h1>KRK Stayawake</h1>
     <p>
@@ -104,7 +119,7 @@
       too. This script prevents that by playing a loud 10hz tone (outside
       human hearing range) every 18 minutes.
     </p>
-    <button onclick="startAudio();">Start</button>
+    <button onclick="new AudioController();"></button>
     <pre id="status"></pre>
   </div>
 </body>
