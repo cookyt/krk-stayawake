@@ -29,6 +29,10 @@
       overflow: scroll;
       border: 1px solid black;
     }
+
+    #currentSound.standby::after { content: "STANDBY"; font-weight: normal; color: grey; }
+    #currentSound.waiting::after { content: attr(data-waiting-text); font-weight: normal; }
+    #currentSound.playing::after { content: "PLAYING"; font-weight: bold; }
   </style>
 
   <script>
@@ -41,8 +45,10 @@
 
     const AUDIO_FREQ = 10;  // Hz
 
-    const BUTTON_TEXT_START = "\u25B6 Start Periodic Audio";
-    const BUTTON_TEXT_STOP = "\u25A0 Stop Periodic Audio";
+    const TIMER_UPDATE_INTERVAL_MSEC = 15 * 1000;
+
+    const BUTTON_TEXT_START = "\u25B6 Start";
+    const BUTTON_TEXT_STOP = "\u25A0 Stop";
 
     function appendStatus(text) {
       p = document.createElement("p");
@@ -54,21 +60,49 @@
       document.querySelector("button").textContent = BUTTON_TEXT_START;
     }
 
+    class PeriodicCallback {
+      constructor(fn, delayMsec) {
+        this.fn_ = fn;
+        this.callbackId_ = setInterval(() => this.callFn_(), delayMsec);
+        this.delayMsec_ = delayMsec;
+        this.nextUnixMsec_ = 0;
+        this.callFn_();
+      }
+
+      get nextUnixMsec() { return this.nextUnixMsec_; }
+
+      clear() {
+        clearInterval(this.callbackId_);
+        this.callbackId_ = null;
+      }
+
+      callFn_() {
+        this.nextUnixMsec_ = Date.now() + this.delayMsec_;
+        this.fn_()
+      }
+    }
+
     class AudioController {
       constructor() {
         this.audioCtx_ = new (window.AudioContext || window.webkitAudioContext)();
         this.isRunningPeriodically_ = true;
         this.button_ = document.querySelector("button");
-        this.callbackId_ = setInterval(() => this.playSoundOnce(), AUDIO_INTERVAL_MSEC);
+        this.currentSoundStatus_ = document.querySelector("#currentSound");
+
+        this.playSoundPeriodicCallback_ =
+            new PeriodicCallback(() => this.playSoundOnce(), AUDIO_INTERVAL_MSEC);
+        this.updateWaitingTextPeriodicCallback_ =
+            new PeriodicCallback(() => this.updateWaitingText_(),
+                                 TIMER_UPDATE_INTERVAL_MSEC);
 
         this.button_.textContent = BUTTON_TEXT_STOP;
-        this.button_.onclick = () => this.stopPeriodicAudio();
+        this.button_.onclick = () => this.stopPeriodicAudio_();
 
-        this.playSoundOnce();
         this.audioCtx_.resume();
       }
 
       playSoundOnce() {
+        this.currentSoundStatus_.className = "playing";
         appendStatus("PLAYING: " + (new Date()).toString());
 
         const oscillator = this.audioCtx_.createOscillator();
@@ -77,24 +111,36 @@
         oscillator.type = 'sine';
         oscillator.start();
         oscillator.stop(this.audioCtx_.currentTime + AUDIO_DURATION_SEC)
-        oscillator.onended = () => this.onSoundFinished();
+        oscillator.onended = () => this.onSoundFinished_();
       }
 
-      onSoundFinished() {
+      onSoundFinished_() {
         if (!this.isRunningPeriodically_) return;
+        this.currentSoundStatus_.className = "waiting";
+        this.updateWaitingText_();
         appendStatus("STOPPED: " + (new Date()).toString());
         appendStatus(document.createElement("hr"));
-        appendStatus("NEXT:    " + (new Date(Date.now() +
-          AUDIO_INTERVAL_MSEC - AUDIO_DURATION_MSEC)).toString())
+        appendStatus("NEXT:    " + (new Date(
+            this.playSoundPeriodicCallback_.nextUnixMsec)).toString())
       }
 
-      stopPeriodicAudio() {
+      updateWaitingText_() {
+        const minutes = Math.round(
+            (this.playSoundPeriodicCallback_.nextUnixMsec - Date.now()) / 1000 / 60);
+        this.currentSoundStatus_.setAttribute(
+            'data-waiting-text', `WAITING for \u2248${minutes} minutes`);
+      }
+
+      stopPeriodicAudio_() {
         this.isRunningPeriodically_ = false;
+        this.currentSoundStatus_.className = "standby";
         appendStatus("Stopping periodic audio");
         this.button_.textContent = BUTTON_TEXT_START;
         this.button_.onclick = () => new AudioController();
         this.audioCtx_.close();
-        clearInterval(this.callbackId_);
+
+        this.playSoundPeriodicCallback_.clear();
+        this.updateWaitingTextPeriodicCallback_.clear();
       }
     }
   </script>
@@ -119,6 +165,7 @@
       too. This script prevents that by playing a loud 10hz tone (outside
       human hearing range) every 18 minutes.
     </p>
+    <p id="currentSound" class="standby" data-waiting-text="WAITING">Periodic Audio State:&nbsp;</p>
     <button onclick="new AudioController();"></button>
     <pre id="status"></pre>
   </div>
