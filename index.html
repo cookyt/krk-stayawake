@@ -64,23 +64,28 @@
       document.body.querySelector("#status").prepend(p);
     }
 
-    function onBodyLoad() {
-      document.querySelector("#playPause").textContent = BUTTON_TEXT_START;
+    function newAudioContext() {
     }
 
     class PeriodicCallback {
       constructor(fn, delayMsec) {
         this.fn_ = fn;
-        this.callbackId_ = setInterval(() => this.callFn_(), delayMsec);
         this.delayMsec_ = delayMsec;
         this.nextUnixMsec_ = 0;
-        this.callFn_();
+        this.callbackId_ = null;
       }
 
       get nextUnixMsec() { return this.nextUnixMsec_; }
 
-      clear() {
+      start() {
+        if (this.callbackId_) return;
+        this.callbackId_ = setInterval(() => this.callFn_(), this.delayMsec_);
+        this.callFn_();
+      }
+
+      stop() {
         clearInterval(this.callbackId_);
+        this.nextUnixMsec_ = 0;
         this.callbackId_ = null;
       }
 
@@ -92,26 +97,34 @@
 
     class WakeSignalController {
       constructor() {
-        this.audioCtx_ = new (window.AudioContext || window.webkitAudioContext)();
-        this.isRunningPeriodically_ = true;
-        this.button_ = document.querySelector("#playPause");
-        this.currentSoundStatus_ = document.querySelector("#currentSound");
+        this.button_ = null;
+        this.currentSoundStatus_ = null;
 
-        this.playSoundPeriodicCallback_ =
-            new PeriodicCallback(() => this.playSoundOnce(), WAKE_SIGNAL_INTERVAL_MSEC);
-        this.updateWaitingTextPeriodicCallback_ =
-            new PeriodicCallback(() => this.updateWaitingText_(),
-                                 TIMER_UPDATE_INTERVAL_MSEC);
+        this.audioCtx_ = null;
 
-        this.button_.textContent = BUTTON_TEXT_STOP;
-        this.button_.onclick = () => this.stopPeriodicAudio_();
-
-        this.audioCtx_.resume();
+        this.abortController_ = new AbortController();
+        this.playSoundPeriodicCallback_ = new PeriodicCallback(
+            () => this.playSoundOnce_(), WAKE_SIGNAL_INTERVAL_MSEC);
+        this.updateWaitingTextPeriodicCallback_ = new PeriodicCallback(
+            () => this.updateWaitTimerText_(), TIMER_UPDATE_INTERVAL_MSEC);
       }
 
-      playSoundOnce() {
+      mountTo(playPauseButtonSelector, currentSoundStatusSelector) {
+        this.button_ = document.querySelector(playPauseButtonSelector);
+        this.button_.textContent = BUTTON_TEXT_START;
+        this.button_.onclick = () => this.startPeriodicAudio_();
+
+        this.currentSoundStatus_ = document.querySelector(
+            currentSoundStatusSelector);
+      }
+
+      playSoundOnce_() {
+        if (!this.audioCtx_) return;
+
         this.currentSoundStatus_.className = "playing";
         appendStatus("PLAYING: " + (new Date()).toString());
+
+        const signal = this.abortController_.signal;
 
         const oscillator = this.audioCtx_.createOscillator();
         oscillator.frequency.value = WAKE_SIGNAL_FREQ;
@@ -119,36 +132,62 @@
         oscillator.type = 'sine';
         oscillator.start();
         oscillator.stop(this.audioCtx_.currentTime + WAKE_SIGNAL_DURATION_SEC)
-        oscillator.onended = () => this.onSoundFinished_();
+        oscillator.onended = () => {
+          console.log('oscillator ended');
+          oscillator.disconnect();
+          if (signal.aborted) return;
+          this.notifyEnteringWaitingState();
+        };
+        signal.addEventListener('abort', () => oscillator.stop());
       }
 
-      onSoundFinished_() {
-        if (!this.isRunningPeriodically_) return;
+      notifyEnteringWaitingState() {
         this.currentSoundStatus_.className = "waiting";
-        this.updateWaitingText_();
+        this.updateWaitTimerText_();
         appendStatus("STOPPED: " + (new Date()).toString());
         appendStatus(document.createElement("hr"));
         appendStatus("NEXT:    " + (new Date(
             this.playSoundPeriodicCallback_.nextUnixMsec)).toString())
       }
 
-      updateWaitingText_() {
+      updateWaitTimerText_() {
+        const nextUnixMsec = this.playSoundPeriodicCallback_.nextUnixMsec;
         const minutes = Math.round(
-            (this.playSoundPeriodicCallback_.nextUnixMsec - Date.now()) / 1000 / 60);
+            (nextUnixMsec - Date.now()) / 1000 / 60);
         this.currentSoundStatus_.setAttribute(
             'data-waiting-text', `WAITING for \u2248${minutes} minutes`);
       }
 
-      stopPeriodicAudio_() {
-        this.isRunningPeriodically_ = false;
-        this.currentSoundStatus_.className = "standby";
-        appendStatus("Stopping periodic audio");
-        this.button_.textContent = BUTTON_TEXT_START;
-        this.button_.onclick = () => new WakeSignalController();
-        this.audioCtx_.close();
+      startPeriodicAudio_() {
+        if (!this.button_) {
+          console.error('Cannot start periodic audio --' +
+                        ' playPause Button not mounted.')
+          return;
+        }
 
-        this.playSoundPeriodicCallback_.clear();
-        this.updateWaitingTextPeriodicCallback_.clear();
+        if (!this.audioCtx_) {
+          this.audioCtx_ = new window.AudioContext();
+        }
+        this.abortController_.abort();
+        this.abortController_ = new AbortController();
+
+        this.playSoundPeriodicCallback_.start();
+        this.updateWaitingTextPeriodicCallback_.start();
+
+        this.button_.textContent = BUTTON_TEXT_STOP;
+        this.button_.onclick = () => this.stopPeriodicAudio_();
+      }
+
+      stopPeriodicAudio_() {
+        this.abortController_.abort();
+        this.currentSoundStatus_.className = "standby";
+        appendStatus("\n\nStopped periodic audio.");
+
+        this.button_.textContent = BUTTON_TEXT_START;
+        this.button_.onclick = () => this.startPeriodicAudio_();
+
+        this.playSoundPeriodicCallback_.stop();
+        this.updateWaitingTextPeriodicCallback_.stop();
       }
     }
 
@@ -168,7 +207,7 @@
 
       playPingSound() {
         if (!this.audioCtx_) {
-          this.audioCtx_ = new (window.AudioContext || window.webkitAudioContext)();
+          this.audioCtx_ = new window.AudioContext();
         }
 
         this.abortPreviousPing_.abort();
@@ -183,7 +222,7 @@
 
         const onEndedPromises = [];
         for (const freq of PING_FREQS) {
-          onEndedPromises.push(this._createOscillator(
+          onEndedPromises.push(this.createOscillator_(
               gainNode, freq, stopTime, this.abortPreviousPing_.signal));
         }
         Promise.allSettled(onEndedPromises).then(events => {
@@ -192,18 +231,18 @@
       }
 
       // Returns a promise that's fulfilled when the new oscillator ends.
-      _createOscillator(destinationNode, freq, stopTime, signal) {
+      createOscillator_(destinationNode, freq, stopTime, signal) {
         const oscillator = destinationNode.context.createOscillator();
         oscillator.frequency.value = freq;
         oscillator.type = 'sine';
         oscillator.start();
         oscillator.stop(stopTime);
-        oscillator.connect(destinationNode)
+        oscillator.connect(destinationNode);
         return new Promise((resolve, reject) => {
           oscillator.onended = (e) => {
             oscillator.disconnect();
             resolve(e);
-          }
+          };
           signal.addEventListener('abort', () => {
             oscillator.stop();
             reject();
@@ -224,7 +263,7 @@
   </script>
 </head>
 
-<body onload="onBodyLoad();">
+<body>
   <div id="content">
     <h1>KRK Stayawake</h1>
     <p>
@@ -245,10 +284,12 @@
 </body>
 
 <script>
-  document.querySelector("#playPause").onclick = () => new WakeSignalController();
+  const wakeSignalController = new WakeSignalController();
+  wakeSignalController.mountTo("#playPause", "#currentSound");
 
-  pingController = new PingController();
-  document.querySelector("#ping").onclick = () => pingController.playPingSound();
+  const pingController = new PingController();
+  document.querySelector("#ping").onclick =
+      () => pingController.playPingSound();
 </script>
 
 </html>
