@@ -14,12 +14,20 @@
       width: 100%;
       margin: 0 auto;
     }
+
+    #button-row {
+      display: flex;
+      flex-direction: row;
+      column-gap: 1em;
+    }
     button {
       font-size: x-large;
-      width: 100%;
       height: 8vh;
       min-height: 70px;
     }
+    button#playPause { flex: 4 }
+    button#ping { flex: 1 }
+
     pre {
       font-family: monospace;
       min-height: 130px;
@@ -37,13 +45,13 @@
 
   <script>
     // How long to wait between starting a single playback of the sound.
-    const AUDIO_INTERVAL_MSEC = 1000 * 60 * 18;
+    const WAKE_SIGNAL_INTERVAL_MSEC = 1000 * 60 * 18;
 
     // Once we start a sound, how long should it play before stopping?
-    const AUDIO_DURATION_SEC = 10;
-    const AUDIO_DURATION_MSEC = AUDIO_DURATION_SEC * 1000;
+    const WAKE_SIGNAL_DURATION_SEC = 10;
+    const WAKE_SIGNAL_DURATION_MSEC = WAKE_SIGNAL_DURATION_SEC * 1000;
 
-    const AUDIO_FREQ = 10;  // Hz
+    const WAKE_SIGNAL_FREQ = 10;  // Hz
 
     const TIMER_UPDATE_INTERVAL_MSEC = 15 * 1000;
 
@@ -57,7 +65,7 @@
     }
 
     function onBodyLoad() {
-      document.querySelector("button").textContent = BUTTON_TEXT_START;
+      document.querySelector("#playPause").textContent = BUTTON_TEXT_START;
     }
 
     class PeriodicCallback {
@@ -82,15 +90,15 @@
       }
     }
 
-    class AudioController {
+    class WakeSignalController {
       constructor() {
         this.audioCtx_ = new (window.AudioContext || window.webkitAudioContext)();
         this.isRunningPeriodically_ = true;
-        this.button_ = document.querySelector("button");
+        this.button_ = document.querySelector("#playPause");
         this.currentSoundStatus_ = document.querySelector("#currentSound");
 
         this.playSoundPeriodicCallback_ =
-            new PeriodicCallback(() => this.playSoundOnce(), AUDIO_INTERVAL_MSEC);
+            new PeriodicCallback(() => this.playSoundOnce(), WAKE_SIGNAL_INTERVAL_MSEC);
         this.updateWaitingTextPeriodicCallback_ =
             new PeriodicCallback(() => this.updateWaitingText_(),
                                  TIMER_UPDATE_INTERVAL_MSEC);
@@ -106,11 +114,11 @@
         appendStatus("PLAYING: " + (new Date()).toString());
 
         const oscillator = this.audioCtx_.createOscillator();
-        oscillator.frequency.value = AUDIO_FREQ;
+        oscillator.frequency.value = WAKE_SIGNAL_FREQ;
         oscillator.connect(this.audioCtx_.destination);
         oscillator.type = 'sine';
         oscillator.start();
-        oscillator.stop(this.audioCtx_.currentTime + AUDIO_DURATION_SEC)
+        oscillator.stop(this.audioCtx_.currentTime + WAKE_SIGNAL_DURATION_SEC)
         oscillator.onended = () => this.onSoundFinished_();
       }
 
@@ -136,13 +144,73 @@
         this.currentSoundStatus_.className = "standby";
         appendStatus("Stopping periodic audio");
         this.button_.textContent = BUTTON_TEXT_START;
-        this.button_.onclick = () => new AudioController();
+        this.button_.onclick = () => new WakeSignalController();
         this.audioCtx_.close();
 
         this.playSoundPeriodicCallback_.clear();
         this.updateWaitingTextPeriodicCallback_.clear();
       }
     }
+
+    PING_FREQS = [
+      440.00,  // A4
+      // 523.25,  // C5
+      554.37,  // C#5
+      659.25,  // E5
+    ];
+    PING_DURATION_SEC = 1;
+
+    class PingController {
+      constructor() {
+        this.audioCtx_ = null;
+        this.abortPreviousPing_ = new AbortController();
+      }
+
+      playPingSound() {
+        if (!this.audioCtx_) {
+          this.audioCtx_ = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        this.abortPreviousPing_.abort();
+        this.abortPreviousPing_ = new AbortController();
+
+        const stopTime = this.audioCtx_.currentTime + PING_DURATION_SEC;
+
+        const gainNode = this.audioCtx_.createGain();
+        gainNode.connect(this.audioCtx_.destination);
+        gainNode.gain.value = 0.95 / PING_FREQS.length;
+        gainNode.gain.exponentialRampToValueAtTime(0.001, stopTime);
+
+        const onEndedPromises = [];
+        for (const freq of PING_FREQS) {
+          onEndedPromises.push(this._createOscillator(
+              gainNode, freq, stopTime, this.abortPreviousPing_.signal));
+        }
+        Promise.allSettled(onEndedPromises).then(events => {
+          gainNode.disconnect();
+        });
+      }
+
+      // Returns a promise that's fulfilled when the new oscillator ends.
+      _createOscillator(destinationNode, freq, stopTime, signal) {
+        const oscillator = destinationNode.context.createOscillator();
+        oscillator.frequency.value = freq;
+        oscillator.type = 'sine';
+        oscillator.start();
+        oscillator.stop(stopTime);
+        oscillator.connect(destinationNode)
+        return new Promise((resolve, reject) => {
+          oscillator.onended = (e) => {
+            oscillator.disconnect();
+            resolve(e);
+          }
+          signal.addEventListener('abort', () => {
+            oscillator.stop();
+            reject();
+          });
+        });
+      }
+    };
   </script>
 
   <!-- Global site tag (gtag.js) - Google Analytics -->
@@ -165,10 +233,22 @@
       too. This script prevents that by playing a loud 10hz tone (outside
       human hearing range) every 18 minutes.
     </p>
-    <p id="currentSound" class="standby" data-waiting-text="WAITING">Periodic Audio State:&nbsp;</p>
-    <button onclick="new AudioController();"></button>
+    <p id="currentSound" class="standby" data-waiting-text="WAITING">
+       Periodic Audio State:&nbsp;
+    </p>
+    <div id="button-row">
+      <button id="playPause"></button>
+      <button id="ping">Ping</button>
+    </div>
     <pre id="status"></pre>
   </div>
 </body>
+
+<script>
+  document.querySelector("#playPause").onclick = () => new WakeSignalController();
+
+  pingController = new PingController();
+  document.querySelector("#ping").onclick = () => pingController.playPingSound();
+</script>
 
 </html>
