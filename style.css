@@ -7,18 +7,33 @@
   margin: 0 auto;
 }
 
-#button-row {
+#buttonRow {
   display: flex;
   flex-direction: row;
-  column-gap: 1em;
+  column-gap: 0.5em;
 }
 button {
   font-size: x-large;
   height: 8vh;
-  min-height: 70px;
+  min-height: 90px;
 }
-button#playPause { flex: 4 }
-button#ping { flex: 1 }
+button#playPause { flex: 5 }
+
+#ping {
+  flex: 2;
+  display: grid;
+  grid-template-rows: 2fr 1fr;
+  grid-template-columns: 1fr 1fr;
+}
+#ping>button {
+  font-size: medium;
+  height: 100%;
+  min-height: 30px;
+}
+button#pingCenter {
+  font-size: large;
+  grid-column: 1 / span 2;
+}
 
 pre {
   font-family: monospace;

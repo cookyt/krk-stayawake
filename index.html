@@ -6,7 +6,6 @@
   <link rel="icon" type="image/png" href="icon.png">
 
   <link rel="stylesheet" href="style.css"></style>
-
   <script src="app.js"></script>
 
   <!-- Global site tag (gtag.js) - Google Analytics -->
@@ -15,12 +14,11 @@
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-
     gtag('config', 'UA-172660630-1');
   </script>
 </head>
 
-<body>
+<body onload="onBodyLoad();">
   <div id="content">
     <h1>KRK Stayawake</h1>
     <p>
@@ -32,21 +30,16 @@
     <p id="currentSound" class="standby" data-waiting-text="WAITING">
        Periodic Audio State:&nbsp;
     </p>
-    <div id="button-row">
+    <div id="buttonRow">
       <button id="playPause"></button>
-      <button id="ping">Ping</button>
+      <div id="ping">
+        <button id="pingCenter">Ping!</button>
+        <button id="pingLeft">Left</button>
+        <button id="pingRight">Right</button>
+      </div>
     </div>
     <pre id="status"></pre>
   </div>
 </body>
-
-<script>
-  const wakeSignalController = new WakeSignalController();
-  wakeSignalController.mountTo("#playPause", "#currentSound");
-
-  const pingController = new PingController();
-  document.querySelector("#ping").onclick =
-      () => pingController.playPingSound();
-</script>
 
 </html>

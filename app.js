@@ -18,9 +18,6 @@ function appendStatus(text) {
   document.body.querySelector("#status").prepend(p);
 }
 
-function newAudioContext() {
-}
-
 class PeriodicCallback {
   constructor(fn, delayMsec) {
     this.fn_ = fn;
@@ -154,9 +151,15 @@ PING_FREQS = [
 PING_DURATION_SEC = 1;
 
 class PingController {
-  constructor() {
+  constructor({pan}) {
     this.audioCtx_ = null;
     this.abortPreviousPing_ = new AbortController();
+    this.pan_ = pan;
+  }
+
+  mountTo(btnSelector) {
+    document.querySelector(btnSelector).onclick =
+        () => this.playPingSound();
   }
 
   playPingSound() {
@@ -191,7 +194,12 @@ class PingController {
     oscillator.type = 'sine';
     oscillator.start();
     oscillator.stop(stopTime);
-    oscillator.connect(destinationNode);
+
+    const panner = destinationNode.context.createStereoPanner();
+    panner.pan.value = this.pan_;
+
+    oscillator.connect(panner).connect(destinationNode);
+
     return new Promise((resolve, reject) => {
       oscillator.onended = (e) => {
         oscillator.disconnect();
@@ -204,3 +212,14 @@ class PingController {
     });
   }
 };
+
+const wakeSignalController = new WakeSignalController();
+const pingCenterController = new PingController({"pan": 0});
+const pingLeftController = new PingController({"pan": -1});
+const pingRightController = new PingController({"pan": +1});
+function onBodyLoad() {
+  wakeSignalController.mountTo("#playPause", "#currentSound");
+  pingCenterController.mountTo("#pingCenter");
+  pingLeftController.mountTo("#pingLeft");
+  pingRightController.mountTo("#pingRight");
+}
