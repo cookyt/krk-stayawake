@@ -1,0 +1,36 @@
+#content {
+  display: flex;
+  flex-direction: column;
+  max-width: 800px;
+  height: 90vh;
+  width: 100%;
+  margin: 0 auto;
+}
+
+#button-row {
+  display: flex;
+  flex-direction: row;
+  column-gap: 1em;
+}
+button {
+  font-size: x-large;
+  height: 8vh;
+  min-height: 70px;
+}
+button#playPause { flex: 4 }
+button#ping { flex: 1 }
+
+pre {
+  font-family: monospace;
+  min-height: 130px;
+  height: 100%;
+  width: 100%;
+  display: block;
+  overflow: scroll;
+  border: 1px solid black;
+}
+
+#currentSound.standby::after { content: "STANDBY"; font-weight: normal; color: grey; }
+#currentSound.waiting::after { content: attr(data-waiting-text); font-weight: normal; }
+#currentSound.playing::after { content: "PLAYING"; font-weight: bold; }
+
