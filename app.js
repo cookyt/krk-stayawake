@@ -142,19 +142,30 @@ class WakeSignalController {
   }
 }
 
-PING_FREQS = [
-  440.00,  // A4
-  // 523.25,  // C5
-  554.37,  // C#5
-  659.25,  // E5
-];
-PING_DURATION_SEC = 1;
+const NOTES = {
+  A4: 440.00,
+  C5: 523.25,
+  Cs5: 554.37,
+  E5: 659.25,
+};
+const CHORD_A5    = [ NOTES.A4, NOTES.E5 ];
+const CHORD_A_MIN = [ NOTES.A4, NOTES.C5, NOTES.E5 ];
+const CHORD_A_MAJ = [ NOTES.A4, NOTES.Cs5, NOTES.E5 ];
+
+const PAN = {
+  CENTER: 0,
+  LEFT: -1,
+  RIGHT: +1,
+};
 
 class PingController {
-  constructor({pan}) {
+  constructor({pan = PAN.CENTER, freqs = CHORD_A5,
+               ping_duration_secs = 1} = {}) {
     this.audioCtx_ = null;
     this.abortPreviousPing_ = new AbortController();
     this.pan_ = pan;
+    this.freqs_ = freqs;
+    this.ping_duration_secs_ = ping_duration_secs;
   }
 
   mountTo(btnSelector) {
@@ -170,15 +181,15 @@ class PingController {
     this.abortPreviousPing_.abort();
     this.abortPreviousPing_ = new AbortController();
 
-    const stopTime = this.audioCtx_.currentTime + PING_DURATION_SEC;
+    const stopTime = this.audioCtx_.currentTime + this.ping_duration_secs_;
 
     const gainNode = this.audioCtx_.createGain();
     gainNode.connect(this.audioCtx_.destination);
-    gainNode.gain.value = 0.95 / PING_FREQS.length;
+    gainNode.gain.value = 0.95 / this.freqs_.length;
     gainNode.gain.exponentialRampToValueAtTime(0.001, stopTime);
 
     const onEndedPromises = [];
-    for (const freq of PING_FREQS) {
+    for (const freq of this.freqs_) {
       onEndedPromises.push(this.createOscillator_(
           gainNode, freq, stopTime, this.abortPreviousPing_.signal));
     }
@@ -214,9 +225,11 @@ class PingController {
 };
 
 const wakeSignalController = new WakeSignalController();
-const pingCenterController = new PingController({"pan": 0});
-const pingLeftController = new PingController({"pan": -1});
-const pingRightController = new PingController({"pan": +1});
+const pingCenterController = new PingController();
+const pingLeftController = new PingController(
+    {"pan": PAN.LEFT, freqs: CHORD_A_MIN});
+const pingRightController = new PingController(
+    {"pan": PAN.RIGHT, freqs: CHORD_A_MAJ});
 function onBodyLoad() {
   wakeSignalController.mountTo("#playPause", "#currentSound");
   pingCenterController.mountTo("#pingCenter");
