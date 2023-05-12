@@ -45,7 +45,20 @@ pre {
   border: 1px solid black;
 }
 
-#currentSound.standby::after { content: "STANDBY"; font-weight: normal; color: grey; }
-#currentSound.waiting::after { content: attr(data-waiting-text); font-weight: normal; }
-#currentSound.playing::after { content: "PLAYING"; font-weight: bold; }
+#currentSound.standby::after {
+  content: "STANDBY";
+  font-weight: normal;
+  color: grey;
+}
+#currentSound.waiting::after {
+  content: attr(data-waiting-text);
+  font-weight: normal;
+}
+#currentSound.playing::after {
+  content: "PLAYING";
+  font-weight: bold;
+}
 
+#currentSound.standby progress {
+  display: none;
+}

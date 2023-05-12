@@ -24,9 +24,15 @@ class PeriodicCallback {
     this.delayMsec_ = delayMsec;
     this.nextUnixMsec_ = 0;
     this.callbackId_ = null;
+    this.isCurrentlyRunning_ = false;
   }
 
+  get isCurrentlyRunning() { return this.isCurrentlyRunning_; }
+
   get nextUnixMsec() { return this.nextUnixMsec_; }
+
+  get delayMsec() { return this.delayMsec_; }
+  get delayMinutes() { return Math.floor(this.delayMsec_ / 1000 / 60); }
 
   start() {
     if (this.callbackId_) return;
@@ -40,9 +46,22 @@ class PeriodicCallback {
     this.callbackId_ = null;
   }
 
-  callFn_() {
+  async callFn_() {
     this.nextUnixMsec_ = Date.now() + this.delayMsec_;
-    this.fn_()
+
+    // Don't allow overlapping executions if previous call takes too long.
+    if (this.isCurrentlyRunning_) {
+      throw new Error("Refusing overlapping invocation of PeriodicClosure",
+                      this.fn_, this.callbackId_);
+    }
+    console.debug("currentlyRunning = true", this.fn_);
+    this.isCurrentlyRunning_ = true;
+    try {
+      await this.fn_();
+    } finally {
+      console.debug("currentlyRunning = false", this.fn_);
+      this.isCurrentlyRunning_ = false;
+    }
   }
 }
 
@@ -50,12 +69,13 @@ class WakeSignalController {
   constructor() {
     this.button_ = null;
     this.currentSoundStatus_ = null;
+    this.currentSoundStatusBar_ = null;
 
     this.audioCtx_ = null;
 
     this.abortController_ = new AbortController();
     this.playSoundPeriodicCallback_ = new PeriodicCallback(
-        () => this.playSoundOnce_(), WAKE_SIGNAL_INTERVAL_MSEC);
+        () => this.playSoundCallbackFn_(), WAKE_SIGNAL_INTERVAL_MSEC);
     this.updateWaitingTextPeriodicCallback_ = new PeriodicCallback(
         () => this.updateWaitTimerText_(), TIMER_UPDATE_INTERVAL_MSEC);
   }
@@ -67,29 +87,44 @@ class WakeSignalController {
 
     this.currentSoundStatus_ = document.querySelector(
         currentSoundStatusSelector);
+    this.currentSoundStatusBar_ =
+        this.currentSoundStatus_.querySelector("progress");
+    this.currentSoundStatusBar_.max =
+        this.playSoundPeriodicCallback_.delayMinutes;
+  }
+
+  async playSoundCallbackFn_() {
+    this.currentSoundStatus_.className = "playing";
+    this.currentSoundStatusBar_.value =
+        this.playSoundPeriodicCallback_.delayMinutes;
+    appendStatus("PLAYING: " + (new Date()).toString());
+    await this.playSoundOnce_();
+    this.notifyEnteringWaitingState();
   }
 
   playSoundOnce_() {
-    if (!this.audioCtx_) return;
-
-    this.currentSoundStatus_.className = "playing";
-    appendStatus("PLAYING: " + (new Date()).toString());
+    if (!this.audioCtx_) throw new Error("Missing AudioContext");
 
     const signal = this.abortController_.signal;
 
-    const oscillator = this.audioCtx_.createOscillator();
-    oscillator.frequency.value = WAKE_SIGNAL_FREQ;
-    oscillator.connect(this.audioCtx_.destination);
-    oscillator.type = 'sine';
-    oscillator.start();
-    oscillator.stop(this.audioCtx_.currentTime + WAKE_SIGNAL_DURATION_SEC)
-    oscillator.onended = () => {
-      console.log('oscillator ended');
-      oscillator.disconnect();
-      if (signal.aborted) return;
-      this.notifyEnteringWaitingState();
-    };
-    signal.addEventListener('abort', () => oscillator.stop());
+    return new Promise((resolve, reject) => {
+      const oscillator = this.audioCtx_.createOscillator();
+      oscillator.frequency.value = WAKE_SIGNAL_FREQ;
+      oscillator.connect(this.audioCtx_.destination);
+      oscillator.type = 'sine';
+      oscillator.start();
+      oscillator.stop(this.audioCtx_.currentTime + WAKE_SIGNAL_DURATION_SEC)
+      oscillator.onended = () => {
+        console.debug('oscillator ended');
+        oscillator.disconnect();
+        if (signal.aborted) return;
+        resolve();
+      };
+      signal.addEventListener('abort', () => {
+        oscillator.stop();
+        reject('Aborted');
+      });
+    });
   }
 
   notifyEnteringWaitingState() {
@@ -102,9 +137,15 @@ class WakeSignalController {
   }
 
   updateWaitTimerText_() {
+    console.debug("Updating wait timer");
+    if (this.currentSoundStatus_.className == "playing") {
+      console.debug("Skipping wait timer update as sound is running");
+      return;
+    }
     const nextUnixMsec = this.playSoundPeriodicCallback_.nextUnixMsec;
-    const minutes = Math.round(
-        (nextUnixMsec - Date.now()) / 1000 / 60);
+    const minutes = Math.round((nextUnixMsec - Date.now()) / 1000 / 60);
+    this.currentSoundStatusBar_.value =
+        minutes - this.playSoundPeriodicCallback_.delayMinutes;
     this.currentSoundStatus_.setAttribute(
         'data-waiting-text', `WAITING for \u2248${minutes} minutes`);
   }
@@ -224,12 +265,14 @@ class PingController {
   }
 };
 
+// Controllers are globals so that it's easier to debug them with dev tools.
 const wakeSignalController = new WakeSignalController();
 const pingCenterController = new PingController();
 const pingLeftController = new PingController(
     {"pan": PAN.LEFT, freqs: CHORD_A_MIN});
 const pingRightController = new PingController(
     {"pan": PAN.RIGHT, freqs: CHORD_A_MAJ});
+
 function onBodyLoad() {
   wakeSignalController.mountTo("#playPause", "#currentSound");
   pingCenterController.mountTo("#pingCenter");
