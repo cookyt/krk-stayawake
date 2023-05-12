@@ -12,7 +12,7 @@
   flex-direction: row;
   column-gap: 0.5em;
 }
-button {
+#buttonRow button {
   font-size: x-large;
   height: 8vh;
   min-height: 90px;

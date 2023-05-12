@@ -27,6 +27,16 @@
       too. This script prevents that by playing a loud 10hz tone (outside
       human hearing range) every 18 minutes.
     </p>
+    <div id="audioDeviceSelectionContainer">
+      <label>
+        Audio Output Device:
+        <button id="queryAudioDevices">&#10226;</button>
+        <select id="audioOutputDeviceSelection">
+          <option value="default">Default</option>
+          <option value="none">Mute</option>
+        </select>
+      </label>
+    </div>
     <p>
       <label id="currentSound" class="standby" data-waiting-text="WAITING">
         Periodic Audio State:
