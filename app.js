@@ -18,6 +18,53 @@ function appendStatus(text) {
   document.body.querySelector("#status").prepend(p);
 }
 
+// Error thrown when an abort signal is triggered before an audio node finishes
+// its job.
+class AbortedError extends Error {};
+
+// Human-readable constants for a StereoPannerNode's param value.
+const PAN = {
+  CENTER: 0,
+  LEFT: -1,
+  RIGHT: +1,
+};
+
+// Creates and starts a new oscillator connected to the provided node. Returned
+// promise resolves when the oscillator finishes, and rejects if the abort
+// signal is triggered.
+async function startOscillator(destinationNode, freq, stopTime, abortSignal,
+                               {type = 'sine', panValue} = {}) {
+  const oscillator = destinationNode.context.createOscillator();
+  oscillator.frequency.value = freq;
+  oscillator.type = type;
+  oscillator.start();
+  oscillator.stop(stopTime);
+
+  if (panValue !== undefined) {
+    const panner = destinationNode.context.createStereoPanner();
+    panner.pan.value = panValue;
+    oscillator.connect(panner).connect(destinationNode);
+  } else {
+    oscillator.connect(destinationNode);
+  }
+
+  return new Promise((resolve, reject) => {
+    oscillator.onended = (e) => {
+      console.debug(`${freq}Hz oscillator ended`);
+      oscillator.disconnect();
+      resolve(e);
+    };
+    abortSignal.addEventListener('abort', () => {
+      oscillator.stop();
+      reject(new AbortedError(`${freq}Hz oscillator aborted.`));
+    });
+  });
+}
+
+// Error raised when a PeriodicCallback attempts to trigger, but finds that a
+// prior invocation hasn't finished yet.
+class OverlappingInvocationError extends Error {};
+
 class PeriodicCallback {
   constructor(fn, delayMsec) {
     this.fn_ = fn;
@@ -34,12 +81,15 @@ class PeriodicCallback {
   get delayMsec() { return this.delayMsec_; }
   get delaySecs() { return Math.floor(this.delayMsec_ / 1000); }
 
+  // Starts the callback running and invokes it now.
   start() {
     if (this.callbackId_) return;
     this.callbackId_ = setInterval(() => this.callFn_(), this.delayMsec_);
     this.callFn_();
   }
 
+  // Prevents any new callbacks from being scheduled. However, does not
+  // abort callbacks currently in-progress.
   stop() {
     clearInterval(this.callbackId_);
     this.nextUnixMsec_ = 0;
@@ -51,21 +101,20 @@ class PeriodicCallback {
 
     // Don't allow overlapping executions if previous call takes too long.
     if (this.isCurrentlyRunning_) {
-      throw new Error("Refusing overlapping invocation of PeriodicClosure",
-                      this.fn_, this.callbackId_);
+      throw new OverlappingInvocationError(
+          "Refusing overlapping invocation of PeriodicClosure",
+          this.fn_, this.callbackId_);
     }
-    console.debug("currentlyRunning = true", this.fn_);
+    console.debug("currentlyRunning=true", this.fn_);
     this.isCurrentlyRunning_ = true;
     try {
       await this.fn_();
     } finally {
-      console.debug("currentlyRunning = false", this.fn_);
+      console.debug("currentlyRunning=false", this.fn_);
       this.isCurrentlyRunning_ = false;
     }
   }
 }
-
-class AbortedError extends Error {};
 
 class WakeSignalController {
   constructor(audioContextFactory) {
@@ -114,28 +163,10 @@ class WakeSignalController {
   async playSoundOnce_() {
     const audioCtx = await this.audioCtxFn_();
     if (!audioCtx) throw new Error("Missing AudioContext");
-
-    const signal = this.abortController_.signal;
-
-    // TODO: Should probably merge this w/ the PingController code.
-    return new Promise((resolve, reject) => {
-      const oscillator = audioCtx.createOscillator();
-      oscillator.frequency.value = WAKE_SIGNAL_FREQ;
-      oscillator.connect(audioCtx.destination);
-      oscillator.type = 'sine';
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + WAKE_SIGNAL_DURATION_SEC)
-      oscillator.onended = () => {
-        console.debug(`${WAKE_SIGNAL_FREQ} Hz oscillator ended`);
-        oscillator.disconnect();
-        if (signal.aborted) return;
-        resolve();
-      };
-      signal.addEventListener('abort', () => {
-        oscillator.stop();
-        reject(new AbortedError("Playback aborted."));
-      });
-    });
+    return startOscillator(
+        audioCtx.destination, WAKE_SIGNAL_FREQ,
+        /*stopTime=*/audioCtx.currentTime + WAKE_SIGNAL_DURATION_SEC,
+        this.abortController_.signal);
   }
 
   notifyEnteringWaitingState() {
@@ -203,12 +234,6 @@ const CHORD_A5    = [ NOTES.A4, NOTES.E5 ];
 const CHORD_A_MIN = [ NOTES.A4, NOTES.C5, NOTES.E5 ];
 const CHORD_A_MAJ = [ NOTES.A4, NOTES.Cs5, NOTES.E5 ];
 
-const PAN = {
-  CENTER: 0,
-  LEFT: -1,
-  RIGHT: +1,
-};
-
 class PingController {
   constructor(audioContextFactory, {pan = PAN.CENTER, freqs = CHORD_A5,
                                     ping_duration_secs = 1} = {}) {
@@ -242,42 +267,17 @@ class PingController {
 
     const onEndedPromises = [];
     for (const freq of this.freqs_) {
-      onEndedPromises.push(this.createOscillator_(
-          gainNode, freq, stopTime, this.abortPreviousPing_.signal));
+      onEndedPromises.push(startOscillator(
+          gainNode, freq, stopTime, this.abortPreviousPing_.signal,
+          {panValue: this.pan_}));
     }
     await Promise.allSettled(onEndedPromises);
     gainNode.disconnect();
   }
-
-  // Returns a promise that's fulfilled when the new oscillator ends.
-  createOscillator_(destinationNode, freq, stopTime, abortSignal) {
-    const oscillator = destinationNode.context.createOscillator();
-    oscillator.frequency.value = freq;
-    oscillator.type = 'sine';
-    oscillator.start();
-    oscillator.stop(stopTime);
-
-    const panner = destinationNode.context.createStereoPanner();
-    panner.pan.value = this.pan_;
-
-    oscillator.connect(panner).connect(destinationNode);
-
-    return new Promise((resolve, reject) => {
-      oscillator.onended = (e) => {
-        console.debug(`${freq} Hz oscillator ended`);
-        oscillator.disconnect();
-        resolve(e);
-      };
-      abortSignal.addEventListener('abort', () => {
-        oscillator.stop();
-        reject(new AbortedError("Ping aborted."));
-      });
-    });
-  }
 };
 
-// A few util functions for manipulating sinkIds.
-const sinkIds = {
+// A few util functions for manipulating SinkIds.
+const SinkIds = {
   // A special sentinel value, rather than a real ID. Tells us we need to
   // configure the audioContext not to send _any_ audio out.
   NONE: 'none',
@@ -294,8 +294,8 @@ const sinkIds = {
 
   areSame: (a, b) => {
     return (a === b) ||
-           (sinkIds.isNone(a) && sinkIds.isNone(b)) ||
-           (sinkIds.isDefault(a) && sinkIds.isDefault(b));
+           (SinkIds.isNone(a) && SinkIds.isNone(b)) ||
+           (SinkIds.isDefault(a) && SinkIds.isDefault(b));
   }
 };
 
@@ -312,7 +312,7 @@ const sinkIds = {
 class AudioOutputDeviceSelectController {
   constructor() {
     this.deviceSelector_ = null;
-    this.selectedDevice_ = sinkIds.DEFAULT;
+    this.selectedDevice_ = SinkIds.DEFAULT;
     this.audioCtx_ = null;
   }
 
@@ -339,10 +339,10 @@ class AudioOutputDeviceSelectController {
 
   async updateSinkIfContextAvailable_() {
     if (!this.audioCtx_) return;
-    if (sinkIds.areSame(this.selectedDevice_, this.audioCtx_.sinkId)) return;
+    if (SinkIds.areSame(this.selectedDevice_, this.audioCtx_.sinkId)) return;
 
     let sinkId = this.selectedDevice_;
-    if (sinkIds.isNone(this.selectedDevice_)) sinkId = {type: 'none'};
+    if (SinkIds.isNone(this.selectedDevice_)) sinkId = {type: 'none'};
     return this.audioCtx_.setSinkId(sinkId);
   }
 
@@ -352,7 +352,7 @@ class AudioOutputDeviceSelectController {
     console.debug("Found audio devices: ", devices);
     const outputs = devices.filter(
         device => device.kind == "audiooutput" &&
-                  !sinkIds.isDefault(device.deviceId));
+                  !SinkIds.isDefault(device.deviceId));
     console.debug("Found audio Output devices: ", outputs);
     const newDevices = outputs
         .map(dev => ({id: dev.deviceId, label: dev.label}))
@@ -369,8 +369,8 @@ class AudioOutputDeviceSelectController {
 
   updateHtml_(newDevices = []) {
     const STANDARD_DEVICES = [
-      {id: sinkIds.DEFAULT, label: "Default"},
-      {id: sinkIds.NONE, label: "Mute"},
+      {id: SinkIds.DEFAULT, label: "Default"},
+      {id: SinkIds.NONE, label: "Mute"},
     ];
     const addDevice = (device) => {
       const option = document.createElement("option");
@@ -392,7 +392,7 @@ class AudioOutputDeviceSelectController {
           "The new set of audio output devices is missing the selected " +
           "device before the refresh. Falling back to default device.",
           this.selectedDevice_, newDevices);
-      this.selectedDevice_ = sinkIds.DEFAULT;
+      this.selectedDevice_ = SinkIds.DEFAULT;
       this.deviceSelector_.selectedIndex = 0;
       this.updateSinkIfContextAvailable_();
     }
