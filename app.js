@@ -116,13 +116,21 @@ class PeriodicCallback {
   }
 }
 
+/**
+ * @callback DestinationNodeFactory
+ * @returns {AudioNode}
+ */
+
 class WakeSignalController {
-  constructor(audioContextFactory) {
+  /**
+   * @param {DestinationNodeFactory} destinationNodeFactory
+   */
+  constructor(destinationNodeFactory) {
     this.button_ = null;
     this.currentSoundStatus_ = null;
     this.currentSoundStatusBar_ = null;
 
-    this.audioCtxFn_ = audioContextFactory;
+    this.destinationNodeFactory_ = destinationNodeFactory;
 
     this.abortController_ = new AbortController();
     this.playSoundPeriodicCallback_ = new PeriodicCallback(
@@ -161,11 +169,26 @@ class WakeSignalController {
   }
 
   async playSoundOnce_() {
-    const audioCtx = await this.audioCtxFn_();
-    if (!audioCtx) throw new Error("Missing AudioContext");
+    const destination = await this.destinationNodeFactory_();
+    if (!destination) throw new Error("Missing AudioContext");
+
+    const currentTime = destination.context.currentTime;
+
+    // Don't start/stop the signal abruptly. Ramp up then down gradually to
+    // avoid edge effects.
+    const gainNode = destination.context.createGain();
+    gainNode.gain.value = 0;
+    gainNode.gain.linearRampToValueAtTime(
+        1, currentTime + WAKE_SIGNAL_DURATION_SEC / 5);
+    gainNode.gain.setValueAtTime(
+        1, currentTime + WAKE_SIGNAL_DURATION_SEC * (4 / 5));
+    gainNode.gain.linearRampToValueAtTime(
+        0, currentTime + WAKE_SIGNAL_DURATION_SEC);
+    gainNode.connect(destination);
+
     return startOscillator(
-        audioCtx.destination, WAKE_SIGNAL_FREQ,
-        /*stopTime=*/audioCtx.currentTime + WAKE_SIGNAL_DURATION_SEC,
+        gainNode, WAKE_SIGNAL_FREQ,
+        currentTime + WAKE_SIGNAL_DURATION_SEC,
         this.abortController_.signal);
   }
 
@@ -235,9 +258,12 @@ const CHORD_A_MIN = [ NOTES.A4, NOTES.C5, NOTES.E5 ];
 const CHORD_A_MAJ = [ NOTES.A4, NOTES.Cs5, NOTES.E5 ];
 
 class PingController {
-  constructor(audioContextFactory, {pan = PAN.CENTER, freqs = CHORD_A5,
-                                    ping_duration_secs = 1} = {}) {
-    this.audioCtxFn_ = audioContextFactory;
+  /**
+   * @param {DestinationNodeFactory} destinationNodeFactory
+   */
+  constructor(destinationNodeFactory, {pan = PAN.CENTER, freqs = CHORD_A5,
+                                       ping_duration_secs = 1} = {}) {
+    this.destinationNodeFactory_ = destinationNodeFactory;
     this.abortPreviousPing_ = new AbortController();
     this.pan_ = pan;
     this.freqs_ = freqs;
@@ -250,10 +276,12 @@ class PingController {
   }
 
   async playPingSound() {
-    const audioCtx = await this.audioCtxFn_();
-    if (!audioCtx) {
+    const destination = await this.destinationNodeFactory_();
+    if (!destination) {
       throw new Error("Failed to initialize AudioContext");
     }
+
+    const audioCtx = destination.context;
 
     this.abortPreviousPing_.abort();
     this.abortPreviousPing_ = new AbortController();
@@ -261,7 +289,7 @@ class PingController {
     const stopTime = audioCtx.currentTime + this.ping_duration_secs_;
 
     const gainNode = audioCtx.createGain();
-    gainNode.connect(audioCtx.destination);
+    gainNode.connect(destination);
     gainNode.gain.value = 0.95 / this.freqs_.length;
     gainNode.gain.exponentialRampToValueAtTime(0.001, stopTime);
 
@@ -402,16 +430,18 @@ class AudioOutputDeviceSelectController {
 // Controllers are globals so that it's easier to debug them with dev tools.
 const audioOutputDeviceSelectController =
     new AudioOutputDeviceSelectController();
-const audioContextFactory =
-    () => audioOutputDeviceSelectController.getOrCreateAudioContext();
+const destinationNodeFactory = async () => {
+  const ctx = await audioOutputDeviceSelectController.getOrCreateAudioContext();
+  return ctx.destination;
+};
 
-const wakeSignalController = new WakeSignalController(audioContextFactory);
-const pingCenterController = new PingController(audioContextFactory);
+const wakeSignalController = new WakeSignalController(destinationNodeFactory);
+const pingCenterController = new PingController(destinationNodeFactory);
 const pingLeftController = new PingController(
-    audioContextFactory,
+    destinationNodeFactory,
     {pan: PAN.LEFT, freqs: CHORD_A_MIN});
 const pingRightController = new PingController(
-    audioContextFactory,
+    destinationNodeFactory,
     {pan: PAN.RIGHT, freqs: CHORD_A_MAJ});
 
 function onBodyLoad() {
