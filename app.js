@@ -344,17 +344,22 @@ class AudioOutputDeviceSelectController {
     this.audioCtx_ = null;
   }
 
-  mountTo(refreshButtonCssSelector, deviceSelectorCssSelector) {
-    // TODO: Hide the device selector if AudioContext.prototype.setSinkId not
-    // supported
-    document.querySelector(refreshButtonCssSelector).onclick =
-        () => this.refreshDevices_();
-    this.deviceSelector_ = document.querySelector(deviceSelectorCssSelector);
-    this.deviceSelector_.oninput = () => this.updateSelectedDevice_();
+  mountTo(containerDivCssSelector, refreshButtonCssSelector,
+          deviceSelectorCssSelector) {
+    if ('setSinkId' in AudioContext.prototype) {
+      document.querySelector(refreshButtonCssSelector).onclick =
+          () => this.refreshDevices_();
+      this.deviceSelector_ = document.querySelector(deviceSelectorCssSelector);
+      this.deviceSelector_.oninput = () => this.updateSelectedDevice_();
 
-    // TODO: Check if I already have device enumeration permission
-    // and use refreshDevices_ if so.
-    this.updateHtml_();
+      // TODO: Check if I already have device enumeration permission
+      // and use refreshDevices_ if so.
+      this.updateHtml_();
+    } else {
+      /** @type {HTMLElement} */
+      const div = document.querySelector(containerDivCssSelector);
+      div.hidden = true;
+    }
   }
 
   async getOrCreateAudioContext() {
@@ -446,7 +451,8 @@ const pingRightController = new PingController(
 
 function onBodyLoad() {
   audioOutputDeviceSelectController.mountTo(
-      "#queryAudioDevices", "#audioOutputDeviceSelection");
+      "#audioDeviceSelectionContainer", "#queryAudioDevices",
+      "#audioOutputDeviceSelection");
 
   wakeSignalController.mountTo("#playPause", "#currentSound");
   pingCenterController.mountTo("#pingCenter");

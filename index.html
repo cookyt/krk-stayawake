@@ -30,12 +30,15 @@
     <div id="audioDeviceSelectionContainer">
       <label>
         Audio Output Device:
-        <button id="queryAudioDevices">&#10226;</button>
-        <select id="audioOutputDeviceSelection">
-          <option value="default">Default</option>
-          <option value="none">Mute</option>
-        </select>
+        <button id="queryAudioDevices"
+                title="Refresh the list of available audio output devices.">
+          &#10226;
+        </button>
       </label>
+      <select id="audioOutputDeviceSelection">
+        <option value="default">Default</option>
+        <option value="none">Mute</option>
+      </select>
     </div>
     <p>
       <label id="currentSound" class="standby" data-waiting-text="WAITING">
