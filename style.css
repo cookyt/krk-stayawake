@@ -10,24 +10,28 @@
 #buttonRow {
   display: flex;
   flex-direction: row;
-  column-gap: 0.5em;
-}
-#buttonRow button {
-  font-size: x-large;
+  gap: 0.3em;
   height: 8vh;
   min-height: 90px;
 }
-button#playPause { flex: 5 }
+#buttonRow button {
+  height: 100%;
+}
+
+button#playPause {
+  font-size: x-large;
+  flex: 5
+}
 
 #ping {
   flex: 2;
   display: grid;
   grid-template-rows: 2fr 1fr;
   grid-template-columns: 1fr 1fr;
+  gap: inherit;
 }
 #ping>button {
   font-size: medium;
-  height: 100%;
   min-height: 30px;
 }
 button#pingCenter {
