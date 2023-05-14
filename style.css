@@ -6,6 +6,9 @@
   width: 100%;
   margin: 0 auto;
 }
+#content>div {
+  margin-bottom: 1em;
+}
 
 #buttonRow {
   display: flex;
@@ -23,14 +26,14 @@ button#playPause {
   flex: 5
 }
 
-#ping {
+#pingContainer {
   flex: 2;
   display: grid;
   grid-template-rows: 2fr 1fr;
   grid-template-columns: 1fr 1fr;
   gap: inherit;
 }
-#ping>button {
+#pingContainer>button {
   font-size: medium;
   min-height: 30px;
 }
@@ -39,30 +42,35 @@ button#pingCenter {
   grid-column: 1 / span 2;
 }
 
-pre {
+#statusLog {
   font-family: monospace;
   min-height: 130px;
   height: 100%;
   width: 100%;
   display: block;
-  overflow: scroll;
+  overflow-y: scroll;
   border: 1px solid black;
+  margin-top: 0;
 }
 
-#currentSound.standby::after {
+#currentSoundIndicator.standby::after {
   content: "STANDBY";
   font-weight: normal;
   color: grey;
 }
-#currentSound.waiting::after {
+#currentSoundIndicator.waiting::after {
   content: attr(data-waiting-text);
   font-weight: normal;
 }
-#currentSound.playing::after {
+#currentSoundIndicator.playing::after {
   content: "PLAYING";
   font-weight: bold;
 }
 
-#currentSound.standby progress {
-  display: none;
-}
+/* Accent colors chosen so that the browser doesn't auto-choose a black
+ * background in the bar to guarantee contrast.
+ * See: https://web.dev/accent-color/#guaranteeing-contrast
+ */
+#currentSoundIndicator.standby progress { display: none; }
+#currentSoundIndicator.waiting progress { accent-color: rgb(0, 120, 0); }
+#currentSoundIndicator.playing progress { accent-color: rgb(0, 160, 0); }

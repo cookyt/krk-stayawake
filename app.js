@@ -1,13 +1,15 @@
+const DEBUG_MODE = false;
+
 // How long to wait between starting a single playback of the sound.
-const WAKE_SIGNAL_INTERVAL_MSEC = 1000 * 60 * 18;
+const WAKE_SIGNAL_INTERVAL_MSEC = 1000 * 60 * (DEBUG_MODE ? 1 : 18);
 
 // Once we start a sound, how long should it play before stopping?
-const WAKE_SIGNAL_DURATION_SEC = 10;
+const WAKE_SIGNAL_DURATION_SEC = (DEBUG_MODE ? 1 : 10);
 const WAKE_SIGNAL_DURATION_MSEC = WAKE_SIGNAL_DURATION_SEC * 1000;
 
-const WAKE_SIGNAL_FREQ = 10;  // Hz
+const WAKE_SIGNAL_FREQ = (DEBUG_MODE ? 100 : 10);  // Hz
 
-const TIMER_UPDATE_INTERVAL_MSEC = 15 * 1000;
+const TIMER_UPDATE_INTERVAL_MSEC = 1000 * (DEBUG_MODE ? 1 : 15);
 
 const BUTTON_TEXT_START = "\u25B6 Start";
 const BUTTON_TEXT_STOP = "\u25A0 Stop";
@@ -15,7 +17,7 @@ const BUTTON_TEXT_STOP = "\u25A0 Stop";
 function appendStatus(text) {
   p = document.createElement("p");
   p.append(text);
-  document.body.querySelector("#status").prepend(p);
+  document.body.querySelector("#statusLog").prepend(p);
 }
 
 // Error thrown when an abort signal is triggered before an audio node finishes
@@ -454,7 +456,7 @@ function onBodyLoad() {
       "#audioDeviceSelectionContainer", "#queryAudioDevices",
       "#audioOutputDeviceSelection");
 
-  wakeSignalController.mountTo("#playPause", "#currentSound");
+  wakeSignalController.mountTo("#playPause", "#currentSoundIndicator");
   pingCenterController.mountTo("#pingCenter");
   pingLeftController.mountTo("#pingLeft");
   pingRightController.mountTo("#pingRight");

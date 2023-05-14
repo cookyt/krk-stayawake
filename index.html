@@ -40,21 +40,23 @@
         <option value="none">Mute</option>
       </select>
     </div>
-    <p>
-      <label id="currentSound" class="standby" data-waiting-text="WAITING">
+    <div>
+      <label id="currentSoundIndicator"
+             class="standby"
+             data-waiting-text="WAITING">
         Periodic Audio State:
         <progress>STANDBY</progress>
       </label>
-    </p>
+    </div>
     <div id="buttonRow">
       <button id="playPause"></button>
-      <div id="ping">
+      <div id="pingContainer">
         <button id="pingCenter">Ping!</button>
         <button id="pingLeft">Left</button>
         <button id="pingRight">Right</button>
       </div>
     </div>
-    <pre id="status"></pre>
+    <pre id="statusLog"></pre>
   </div>
 </body>
 
