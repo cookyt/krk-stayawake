@@ -27,26 +27,31 @@
       too. This script prevents that by playing a loud 10hz tone (outside
       human hearing range) every 18 minutes.
     </p>
-    <div id="audioDeviceSelectionContainer">
-      <label>
-        Audio Output Device:
+    <div id="controlContainer">
+      <label>Audio Output Device:</label>
+      <div id="audioDeviceSelectionContainer">
         <button id="queryAudioDevices"
                 title="Refresh the list of available audio output devices.">
           &#10226;
         </button>
-      </label>
-      <select id="audioOutputDeviceSelection">
-        <option value="default">Default</option>
-        <option value="none">Mute</option>
-      </select>
-    </div>
-    <div>
-      <label id="currentSoundIndicator"
-             class="standby"
-             data-waiting-text="WAITING">
-        Periodic Audio State:
+        <select id="audioOutputDeviceSelection">
+          <option value="default">Default</option>
+          <option value="none">Mute</option>
+        </select>
+      </div>
+
+      <label>Volume:</label>
+      <div id="volumeSliderContainer" data-uncommitted-value="100">
+        <input id="volumeSlider" type="range"
+               min="0" max="100" value="100"></input>
+      </div>
+
+      <label>Periodic Audio State:</label>
+      <div id="currentSoundIndicator"
+           class="standby"
+           data-waiting-text="WAITING">
         <progress>STANDBY</progress>
-      </label>
+      </div>
     </div>
     <div id="buttonRow">
       <button id="playPause"></button>

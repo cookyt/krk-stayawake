@@ -1,3 +1,12 @@
+body {
+  font-family: sans-serif;
+}
+
+p {
+  margin-top: 0;
+  margin-bottom: 1.2em;
+}
+
 #content {
   display: flex;
   flex-direction: column;
@@ -53,6 +62,32 @@ button#pingCenter {
   margin-top: 0;
 }
 
+#controlContainer {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 0.5em;
+  row-gap: 0.5em;
+}
+#controlContainer label {
+  text-align: right;
+  font-style: italic;
+}
+
+#audioDeviceSelectionContainer > * {
+  margin: 0;
+  height: 100%;
+  vertical-align: top;
+}
+
+#volumeSlider {
+  min-width: 100px;
+  width: 30%;
+  vertical-align: bottom;
+}
+#volumeSliderContainer::after {
+  content: attr(data-uncommitted-value);
+}
+
 #currentSoundIndicator.standby::after {
   content: "STANDBY";
   font-weight: normal;
@@ -71,6 +106,10 @@ button#pingCenter {
  * background in the bar to guarantee contrast.
  * See: https://web.dev/accent-color/#guaranteeing-contrast
  */
+#currentSoundIndicator progress {
+  min-width: 100px;
+  width: 30%;
+  vertical-align: bottom;
+}
 #currentSoundIndicator.standby progress { display: none; }
-#currentSoundIndicator.waiting progress { accent-color: rgb(0, 120, 0); }
 #currentSoundIndicator.playing progress { accent-color: rgb(0, 160, 0); }

@@ -128,8 +128,11 @@ class WakeSignalController {
    * @param {DestinationNodeFactory} destinationNodeFactory
    */
   constructor(destinationNodeFactory) {
+    /** @type {?HTMLButtonElement} */
     this.button_ = null;
+    /** @type {?HTMLElement} */
     this.currentSoundStatus_ = null;
+    /** @type {?HTMLProgressElement} */
     this.currentSoundStatusBar_ = null;
 
     this.destinationNodeFactory_ = destinationNodeFactory;
@@ -341,8 +344,11 @@ const SinkIds = {
 // See: https://developer.chrome.com/blog/audiocontext-setsinkid/
 class AudioOutputDeviceSelectController {
   constructor() {
+    /** @type {?HTMLSelectElement} */
     this.deviceSelector_ = null;
     this.selectedDevice_ = SinkIds.DEFAULT;
+
+    /** @type {?AudioContext} */
     this.audioCtx_ = null;
   }
 
@@ -370,6 +376,11 @@ class AudioOutputDeviceSelectController {
     }
     await this.updateSinkIfContextAvailable_();
     return this.audioCtx_;
+  }
+
+  async getAudioDestination() {
+    const ctx = await this.getOrCreateAudioContext();
+    return ctx.destination;
   }
 
   async updateSinkIfContextAvailable_() {
@@ -434,13 +445,73 @@ class AudioOutputDeviceSelectController {
   }
 };
 
+class VolumeController {
+  constructor(destinationNodeFactory) {
+    /** @type {DestinationNodeFactory} */
+    this.destinationNodeFactory_ = destinationNodeFactory;
+
+    /** @type {?GainNode} */
+    this.gainNode_ = null;
+
+    /** @type {?HTMLElement} */
+    this.volumeSliderContainer_ = null;
+
+    /** @type {?HTMLInputElement} */
+    this.volumeSlider_ = null;
+  }
+
+  mountTo(volumeSliderContainerCssSelector) {
+    this.volumeSliderContainer_ = document.querySelector(
+        volumeSliderContainerCssSelector)
+    this.volumeSliderContainer_.setAttribute(
+        'data-uncommitted-value', '100');
+
+    this.volumeSlider_ = this.volumeSliderContainer_.querySelector(
+        "input[type=range]");
+    this.volumeSlider_.max = 100;
+    this.volumeSlider_.min = 0;
+    this.volumeSlider_.step = 1;
+    this.volumeSlider_.value = 100;
+
+    this.volumeSlider_.oninput = (e) => {
+      this.volumeSliderContainer_.setAttribute(
+          'data-uncommitted-value', e.target.value);
+    };
+    this.volumeSlider_.onchange = () => this.updateGain_();
+  }
+
+  async getAudioDestination() {
+    if (this.gainNode_ != null) return this.gainNode_;
+
+    const destination = await this.destinationNodeFactory_();
+    this.gainNode_ = destination.context.createGain();
+    this.gainNode_.connect(destination);
+    return this.gainNode_;
+  }
+
+  updateGain_() {
+    // Use an x^2 ramp as an approximation of an exponential since
+    // percieved loudness ~= log(gain)
+    let newGain = Number(this.volumeSlider_.value / this.volumeSlider_.max);
+    newGain = newGain * newGain;
+
+    console.debug("Updating gain to: ", newGain);
+    if (this.gainNode_ == null) {
+      console.warn("GainNode not initialized yet.");
+      return;
+    }
+    this.gainNode_.gain.value = newGain;
+  }
+}
+
 // Controllers are globals so that it's easier to debug them with dev tools.
 const audioOutputDeviceSelectController =
     new AudioOutputDeviceSelectController();
-const destinationNodeFactory = async () => {
-  const ctx = await audioOutputDeviceSelectController.getOrCreateAudioContext();
-  return ctx.destination;
-};
+const volumeController = new VolumeController(
+    () => audioOutputDeviceSelectController.getAudioDestination());
+
+const destinationNodeFactory =
+    () => volumeController.getAudioDestination();
 
 const wakeSignalController = new WakeSignalController(destinationNodeFactory);
 const pingCenterController = new PingController(destinationNodeFactory);
@@ -455,6 +526,7 @@ function onBodyLoad() {
   audioOutputDeviceSelectController.mountTo(
       "#audioDeviceSelectionContainer", "#queryAudioDevices",
       "#audioOutputDeviceSelection");
+  volumeController.mountTo("#volumeSliderContainer");
 
   wakeSignalController.mountTo("#playPause", "#currentSoundIndicator");
   pingCenterController.mountTo("#pingCenter");
